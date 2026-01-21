@@ -1,42 +1,32 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
-
-export type UserDocument = HydratedDocument<User>;
-
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Transaction } from '../../transactions/entities/transaction.entity';
+ 
 export enum UserRole {
   ADMIN = 'ADMIN',
   VIEWER = 'VIEWER',
-  OPERATOR = 'OPERATOR',
 }
-
-@Schema({ timestamps: true })
+ 
+@Entity('users')
 export class User {
-  @Prop({ required: true })
+  @PrimaryGeneratedColumn('uuid')
   id: string;
-
-  @Prop({ required: true })
+ 
+  @Column({ type: 'varchar', length: 100, nullable: false })
   name: string;
-
-  @Prop({ required: true, unique: true })
-  email: string;
-
-  @Prop({ required: true, enum: UserRole, default: UserRole.VIEWER })
+ 
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.VIEWER
+  })
   role: UserRole;
-
-  @Prop({ type: [String], default: [] })
-  permissions: string[];
-
-  @Prop({ type: Number, default: 0 })
+ 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   balance: number;
-
-  @Prop()
-  lastLogin: Date;
-
-  @Prop({ default: Date.now })
+ 
+  @CreateDateColumn()
   createdAt: Date;
-
-  @Prop()
-  updatedAt?: Date;
+ 
+  @OneToMany(() => Transaction, transaction => transaction.user)
+  transactions: Transaction[];
 }
-
-export const UserSchema = SchemaFactory.createForClass(User);

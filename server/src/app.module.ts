@@ -4,7 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-// import { TransactionsModule } from './transactions/transactions.module';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
@@ -16,13 +16,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 5432,
       username: process.env.DB_USERNAME || 'postgres',
-      password: process.env.DB_DATABASE || 'Civica012026',
+      password: process.env.DB_PASSWORD || 'admin',
       database: process.env.DB_DATABASE || 'postgres',
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: process.env.NODE_ENV === 'development',
       logging: true,
     }),
-    // TransactionsModule
+    TransactionsModule
   ],
   controllers: [AppController],
   providers: [AppService],

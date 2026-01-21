@@ -1,52 +1,63 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Between } from 'typeorm';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { Transaction, TransactionDocument, TransactionStatus } from './entities/transaction.entity';
-import { User, UserDocument } from '../users/entities/user.entity';
-
+import {
+  Transaction,
+  TransactionType,
+  TransactionStatus
+} from './entities/transaction.entity';
+import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/entities/user.entity';
+ 
 @Injectable()
 export class TransactionsService {
   constructor(
-    @InjectModel(Transaction.name) private transactionModel: Model<TransactionDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectRepository(Transaction)
+    private transactionsRepository: Repository<Transaction>,
+    private usersService: UsersService,
   ) {}
-
-  /**
-   * Crear una nueva transacción
-   * Sincroniza el balance del usuario después de crear
-   */
+ 
   async create(createTransactionDto: CreateTransactionDto): Promise<Transaction> {
-    const transaction = new this.transactionModel({
+    // Verificar permisos del usuario
+    const canWrite = await this.usersService.checkPermission(
+      createTransactionDto.userId,
+      UserRole.ADMIN
+    );
+    
+    if (!canWrite) {
+      throw new ForbiddenException('User does not have write permissions');
+    }
+ 
+    const transaction = this.transactionsRepository.create({
       ...createTransactionDto,
-      status: TransactionStatus.PENDING,
-      createdAt: new Date(),
+      // status: TransactionStatus.PENDING,
     });
-
-    const savedTransaction = await transaction.save();
-
-    // Sincronizar balance del usuario después de crear
+ 
+    const savedTransaction = await this.transactionsRepository.save(transaction);
+ 
+    // Sincronizar balance del usuario
     await this.syncUserBalance(createTransactionDto.userId);
-
+ 
     return savedTransaction;
   }
-
-  /**
-   * Obtener todas las transacciones con paginación
-   */
-  async findAll(page: number = 1, limit: number = 10) {
+ 
+  async findAll(userId: string, page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
-
-    const data = await this.transactionModel
-      .find()
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .exec();
-
-    const total = await this.transactionModel.countDocuments().exec();
-
+ 
+    const [data, total] = await this.transactionsRepository.findAndCount({
+      where: { userId },
+      skip,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+ 
     return {
       data,
       pagination: {
@@ -57,110 +68,88 @@ export class TransactionsService {
       },
     };
   }
-
-  /**
-   * Obtener transacciones filtradas por userId con paginación
-   */
-  async findByUser(userId: string, page: number = 1, limit: number = 10) {
-    const skip = (page - 1) * limit;
-
-    const data = await this.transactionModel
-      .find({ userId })
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .exec();
-
-    const total = await this.transactionModel.countDocuments({ userId }).exec();
-
-    return {
-      data,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  /**
-   * Obtener una transacción por ID
-   */
+ 
   async findOne(id: string): Promise<Transaction> {
-    const transaction = await this.transactionModel.findById(id).exec();
-
+    const transaction = await this.transactionsRepository.findOne({
+      where: { id }
+    });
+ 
     if (!transaction) {
       throw new NotFoundException(`Transaction with ID ${id} not found`);
     }
-
+ 
     return transaction;
   }
-
-  /**
-   * Actualizar una transacción existente
-   * Sincroniza el balance del usuario después de actualizar
-   */
+ 
   async update(id: string, updateTransactionDto: UpdateTransactionDto): Promise<Transaction> {
-    const transaction = await this.transactionModel.findByIdAndUpdate(
-      id,
-      {
-        ...updateTransactionDto,
-        updatedAt: new Date(),
-      },
-      { new: true },
+    // Primero obtener la transacción para verificar el userId
+    const existingTransaction = await this.findOne(id);
+    
+    // Verificar permisos del usuario
+    const canWrite = await this.usersService.checkPermission(
+      existingTransaction.userId,
+      UserRole.ADMIN
     );
-
-    if (!transaction) {
-      throw new NotFoundException(`Transaction with ID ${id} not found`);
+    
+    if (!canWrite) {
+      throw new ForbiddenException('User does not have write permissions');
     }
-
-    // Sincronizar balance del usuario después de actualizar
-    await this.syncUserBalance(transaction.userId);
-
-    return transaction;
+ 
+    await this.transactionsRepository.update(id, {
+      ...updateTransactionDto,
+      // updatedAt: new Date(),
+    });
+ 
+    const updatedTransaction = await this.findOne(id);
+ 
+    // Sincronizar balance del usuario
+    await this.syncUserBalance(updatedTransaction.userId);
+ 
+    return updatedTransaction;
   }
-
-  /**
-   * Eliminar una transacción
-   * Sincroniza el balance del usuario después de eliminar
-   */
+ 
   async remove(id: string): Promise<{ message: string }> {
-    const transaction = await this.transactionModel.findByIdAndDelete(id).exec();
-
-    if (!transaction) {
-      throw new NotFoundException(`Transaction with ID ${id} not found`);
+    const transaction = await this.findOne(id);
+    
+    // Verificar permisos del usuario
+    const canWrite = await this.usersService.checkPermission(
+      transaction.userId,
+      UserRole.ADMIN
+    );
+    
+    if (!canWrite) {
+      throw new ForbiddenException('User does not have write permissions');
     }
-
-    // Sincronizar balance del usuario después de eliminar
+ 
+    await this.transactionsRepository.delete(id);
+ 
+    // Sincronizar balance del usuario
     await this.syncUserBalance(transaction.userId);
-
+ 
     return { message: `Transaction ${id} has been deleted` };
   }
-
-  /**
-   * Sincronizar el balance del usuario
-   * Calcula el nuevo balance basado en transacciones completadas
-   */
+ 
   async syncUserBalance(userId: string): Promise<void> {
     try {
       // Sumar todas las transacciones completadas del usuario
-      const completedTransactions = await this.transactionModel
-        .find({
-          userId,
-          status: TransactionStatus.COMPLETED,
-        })
-        .exec();
-
-      const totalBalance = completedTransactions.reduce((sum, transaction) => {
-        return sum + transaction.amount;
-      }, 0);
-
+      const result = await this.transactionsRepository
+        .createQueryBuilder('transaction')
+        .select('SUM(transaction.amount)', 'total')
+        .where('transaction.userId = :userId', { userId })
+        // .andWhere('transaction.status = :status', { status: TransactionStatus.COMPLETED })
+        .getRawOne();
+ 
+      const totalBalance = result.total ? Number(result.total) : 0;
+ 
       // Actualizar el balance del usuario
-      await this.userModel.findByIdAndUpdate(userId, { balance: totalBalance }).exec();
+      await this.usersService.setBalance(userId, totalBalance);
     } catch (error) {
-      // Log error pero no fallar la operación principal
       console.error(`Error syncing balance for user ${userId}:`, error);
     }
+  }
+ 
+  async getUserBalance(userId: string): Promise<number> {
+    const user = await this.usersService.findOne(userId);
+    return Number(user.balance);
   }
 }

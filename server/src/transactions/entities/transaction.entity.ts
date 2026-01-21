@@ -1,45 +1,60 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
-
-export type TransactionDocument = HydratedDocument<Transaction>;
-
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn
+} from 'typeorm';
+import { User } from '../../users/entities/user.entity';
+ 
 export enum TransactionType {
   TRANSFER = 'transfer',
   PAYMENT = 'payment',
-  DIRECT_DEBIT = 'direct_debit',
-  INVESTMENT = 'investment',
+  INCOME = 'income',
+  EXPENSE = 'expense'
 }
-
+ 
 export enum TransactionStatus {
   COMPLETED = 'completed',
   PENDING = 'pending',
   PROCESSING = 'processing',
   FAILED = 'failed',
 }
-
-@Schema({ timestamps: true })
+ 
+@Entity('transactions')
 export class Transaction {
-  @Prop({ required: true })
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+ 
+  @Column({ type: 'varchar', length: 200, nullable: false })
   name: string;
-
-  @Prop({ required: true, enum: TransactionType })
+ 
+  @Column({
+    type: 'enum',
+    enum: TransactionType,
+    nullable: false
+  })
   type: TransactionType;
-
-  @Prop({ required: true, type: Number })
+ 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: false })
   amount: number;
-
-  @Prop({ required: true, enum: TransactionStatus, default: TransactionStatus.PENDING })
-  status: TransactionStatus;
-
-  @Prop({ required: true })
+ 
+  // @Column({
+  //   type: 'enum',
+  //   enum: TransactionStatus,
+  //   default: TransactionStatus.PENDING
+  // })
+  // status: TransactionStatus;
+ 
+  @Column({ type: 'uuid', nullable: false })
   userId: string;
-
-  @Prop({ default: Date.now })
+ 
+  @ManyToOne(() => User, user => user.transactions)
+  @JoinColumn({ name: 'userId' })
+  user: User;
+ 
+  @CreateDateColumn()
   createdAt: Date;
-
-  @Prop()
-  updatedAt?: Date;
 }
-
-export const TransactionSchema = SchemaFactory.createForClass(Transaction);
-

@@ -18,11 +18,10 @@ export class UpdateTransactionDto {
 
   @IsNumber()
   @IsOptional()
-  @IsPositive()
   amount?: number;
 
-  @IsEnum(TransactionStatus)
-  @IsOptional()
-  status?: TransactionStatus;
+  // @IsEnum(TransactionStatus)
+  // @IsOptional()
+  // status?: TransactionStatus;
 }
 

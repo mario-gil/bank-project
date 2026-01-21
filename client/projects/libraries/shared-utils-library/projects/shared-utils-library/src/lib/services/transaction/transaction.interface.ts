@@ -4,8 +4,8 @@
 export enum TransactionType {
   TRANSFER = 'transfer',
   PAYMENT = 'payment',
-  DIRECT_DEBIT = 'direct_debit',
-  INVESTMENT = 'investment',
+  INCOME = 'income',
+  EXPENSE = 'expense'
 }
 
 /**
@@ -30,7 +30,6 @@ export interface Transaction {
   status: TransactionStatus;
   userId: string;
   createdAt?: Date;
-  updatedAt?: Date;
 }
 
 /**

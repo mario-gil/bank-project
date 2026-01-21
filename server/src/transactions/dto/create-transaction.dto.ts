@@ -3,8 +3,7 @@ import {
   IsNumber,
   IsNotEmpty,
   IsEnum,
-  Min,
-  IsPositive,
+  IsUUID,
 } from 'class-validator';
 import { TransactionType } from '../entities/transaction.entity';
 
@@ -19,10 +18,9 @@ export class CreateTransactionDto {
 
   @IsNumber()
   @IsNotEmpty()
-  @IsPositive()
   amount: number;
 
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
   userId: string;
 }
